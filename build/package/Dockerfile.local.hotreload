@@ -1,0 +1,11 @@
+FROM golang:1.19-alpine
+WORKDIR /app
+
+# Install Compile Daemon for go. We'll use it to watch changes in go files
+RUN go install github.com/githubnemo/CompileDaemon@latest
+
+# copy go.mod and go.sum and download and verify
+COPY go.* ./
+RUN go mod download && go mod verify
+
+ENTRYPOINT CompileDaemon -build="go build -o main cmd/main/main.go" -command="./main"

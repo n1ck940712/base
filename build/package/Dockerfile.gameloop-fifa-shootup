@@ -1,0 +1,12 @@
+FROM golang:1.19-alpine3.16 as build
+WORKDIR /app
+
+# Copy and build the app
+COPY . .
+RUN go mod download && go mod verify
+RUN go build -o gameloop-fifa-shootup cmd/gameloopfifashootup/main.go
+
+FROM alpine:3.16
+COPY --from=build /app/gameloop-fifa-shootup /app/gameloop-fifa-shootup
+
+ENTRYPOINT [ "/app/gameloop-fifa-shootup" ]

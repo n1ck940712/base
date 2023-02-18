@@ -1,0 +1,187 @@
+version: "3.7"
+
+services:
+  nginx:
+    networks:
+      - minigame_shared
+    container_name: nginx
+    image: nginx:local
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.local.nginx
+    ports:
+      - 80:80
+    restart: always
+    links:
+      - mggo_api
+      - mggo_ws_lolcouple
+      - mggo_ws_loltower
+    volumes:
+      - ./build/package/nginx:/etc/nginx/conf.d
+  mggo_api:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-api
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=api
+      - SERVER_PORT=90
+    ports:
+      - 90:90
+    volumes:
+      - .:/app/
+  mggo_ws_loltower:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-websocket-loltower
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=websocket
+      - SERVER_IDENTIFIER=loltower
+      - SERVER_PORT=1323
+    ports:
+      - 1323:1323
+    volumes:
+      - .:/app
+  mggo_ws_lolcouple:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-websocket-lolcouple
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=websocket
+      - SERVER_IDENTIFIER=lolcouple
+      - SERVER_PORT=1324
+    ports:
+      - 1324:1324
+    volumes:
+      - .:/app
+  mggo_ws_soccershootout:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-websocket-soccer-shootout
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=websocket
+      - SERVER_IDENTIFIER=soccershootout
+      - SERVER_PORT=1325
+    ports:
+      - 1325:1325
+    volumes:
+      - .:/app
+  mggo_ws_fishprawncrab:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-websocket-fish-prawn-crab
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=websocket
+      - SERVER_IDENTIFIER=fishprawncrab
+      - SERVER_PORT=1326
+    ports:
+      - 1326:1326
+    volumes:
+      - .:/app
+  mggo_gl_loltower:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-gameloop-lol-tower
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=gameloop
+      - SERVER_IDENTIFIER=loltower
+    volumes:
+      - .:/app/
+  mggo_gl_lolcouple:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-gameloop-lol-couple
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=gameloop
+      - SERVER_IDENTIFIER=lolcouple
+    external_links:
+      - websocker_server
+    volumes:
+      - .:/app/
+  mggo_gl_soccershootout:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-gameloop-soccer-shootout
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=gameloop
+      - SERVER_IDENTIFIER=soccershootout
+    external_links:
+      - websocker_server
+    volumes:
+      - .:/app/
+  mggo_gl_fishprawncrab:
+    networks:
+      - minigame_shared
+    container_name: minigame-go-gameloop-fish-prawn-crab
+    image: minigame-go-main:local
+    restart: always
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.${DOCKERFILE_BASE:-local}
+    env_file:
+      - build/package/local.env
+    environment:
+      - SERVER_TYPE=gameloop
+      - SERVER_IDENTIFIER=fishprawncrab
+    external_links:
+      - websocker_server
+    volumes:
+      - .:/app/
+networks:
+  minigame_shared:
+    external: true

@@ -1,0 +1,8 @@
+FROM golang:1.19-alpine
+WORKDIR /app
+
+# copy go.mod and go.sum and download and verify
+COPY go.* ./
+RUN go mod download && go mod verify
+
+ENTRYPOINT ["./build/package/entrypoint.sh"]

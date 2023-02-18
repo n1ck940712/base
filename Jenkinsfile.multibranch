@@ -1,0 +1,103 @@
+apps_list = ['api','ws-lol-tower','ws-lol-couple', 'ws-soccer-shootout','gl-lol-tower','gl-lol-couple', 'gl-soccer-shootout']
+
+def initialize() {
+    if (env.BRANCH_NAME == 'master') {
+        env.IMAGE_TYPE = 'release'
+        env.K8S_NAMESPACE = 'live'
+        env.LATEST_TAG = "${DOCKER_REGISTRY_PATH}${PROJECT}-main:latest"
+    } else if (env.BRANCH_NAME == 'dev') {
+        env.IMAGE_TYPE = 'dev'
+        env.K8S_NAMESPACE = 'dev'
+        env.LATEST_TAG = "${DOCKER_REGISTRY_PATH}${PROJECT}-main:dev"
+    } else {
+        env.IMAGE_TYPE = 'ephemeral'
+        env.LATEST_TAG="${DOCKER_REGISTRY_PATH}${PROJECT}-main:ephemeral"
+    }
+}
+
+pipeline {
+    agent any
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: env.BRANCH_NAME ==~ /master|dev/ ? '10' : '1'))
+        disableConcurrentBuilds()
+    }
+
+     environment {
+        PROJECT="minigame-backend-golang"
+        DOCKER_REGISTRY_PATH='docker-registry.r4espt.com/r4pid/'
+        SLACK_PREFIX = "${JOB_NAME} #${BUILD_NUMBER}: "
+        CHANGES_TEXT_FILE_PATH = 'build-changes.txt'
+        BITBUCKET_COMMENTOR = credentials('bitbucket-commentor')
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                script {
+                    initialize()
+                    def slackResponse = slackSend(channel: 'jenkins', color: 'good', message: env.SLACK_PREFIX + "Started")
+                    env.SLACK_THREAD_ID = slackResponse.threadId
+                
+                    sh 'git log $GIT_PREVIOUS_SUCCESSFUL_COMMIT..$GIT_COMMIT --oneline --abbrev-commit --pretty=format:"%h [%ad (%cr)] %s - %an" >  $CHANGES_TEXT_FILE_PATH'
+                    slackUploadFile(channel: env.SLACK_THREAD_ID, filePath: env.CHANGES_TEXT_FILE_PATH, initialComment: "Build changes")
+    
+                    slackSend(channel: env.SLACK_THREAD_ID, color: 'good', message: "Building ${PROJECT} ${IMAGE_TYPE} docker image ")
+                    sh "./build.sh -i main -b ${IMAGE_TYPE} -v ${BUILD_NUMBER} -r ${DOCKER_REGISTRY_PATH}"
+                    env.IMAGE_TAG=sh(script: 'cat .last_built_image', returnStdout: true).trim()
+
+                    slackSend(channel: "${SLACK_THREAD_ID}", color: 'good', message: 'Built ' + env.IMAGE_TAG)
+                }
+            }
+        }
+        stage('Test') {
+            steps {
+                slackSend(channel: env.SLACK_THREAD_ID, color: 'good', message: 'Test')
+            }
+        }
+        stage('Upload') {
+            when {
+                expression {
+                    env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'dev'
+                }
+            }
+            steps {
+                slackSend(channel: env.SLACK_THREAD_ID, color: 'good', message: "Uploading ${PROJECT} ${IMAGE_TYPE} docker image ")
+                sh "docker push ${IMAGE_TAG}"
+                sh "docker push ${LATEST_TAG}"
+            }
+        }
+        stage('Deploy') {
+            when {
+                expression {
+                    env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'dev'
+                }
+            }
+            steps {
+                script{
+                    apps_list.each { app ->
+                        slackSend (channel: env.SLACK_THREAD_ID, color: 'good', message: "Deploying minigame-be-go-${app}")
+                        sh "kubectl set env deployment/r4pid-minigame-be-go-${app} IMAGE_TAG=minigame-be-golang-main:${IMAGE_TYPE}-${BUILD_NUMBER} -n ${K8S_NAMESPACE}"
+                        sh "kubectl set image deployment/r4pid-minigame-be-go-${app} r4pid-minigame-be-go-${app}=${IMAGE_TAG} -n ${K8S_NAMESPACE} --record"
+                        slackSend (channel: env.SLACK_THREAD_ID, color: 'good', message: "Waiting for r4pid-minigame-be-go-${app} replicas to be ready")
+                        sh "./build/wait-k8s-deployment.sh -d r4pid-minigame-be-go-${app} -n ${K8S_NAMESPACE}"
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            slackSend(channel: env.SLACK_THREAD_ID, color: 'good', message: ':done: Success')
+            sh './build/bitbucket-comment.sh success $BITBUCKET_COMMENTOR_USR $BITBUCKET_COMMENTOR_PSW $BRANCH_NAME $GIT_URL'
+        }
+        failure {
+            slackSend(channel: env.SLACK_THREAD_ID, color: 'good', message: ':wrong: Failed')
+            sh './build/bitbucket-comment.sh failed $BITBUCKET_COMMENTOR_USR $BITBUCKET_COMMENTOR_PSW $BRANCH_NAME $GIT_URL'
+        }
+        cleanup {
+            slackSend(channel: env.SLACK_THREAD_ID, color: 'good', message: 'Cleanup')
+            sh "docker rmi ${IMAGE_TAG}"
+        }
+    }
+}
